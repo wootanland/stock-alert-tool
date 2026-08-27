@@ -330,15 +330,23 @@ async function loadCompanyList() {
     const rows = parseCSV(text);
     if (!rows.length) throw new Error('empty');
     const header = rows[0].map(h => h.trim());
-    let codeIdx = header.indexOf('コード');
-    let nameIdx = header.indexOf('銘柄名');
-    if (codeIdx === -1) codeIdx = header.findIndex(h => h.includes('コード') && !h.includes('業種') && !h.includes('規模') && !h.includes('EDINET'));
-    if (nameIdx === -1) nameIdx = header.findIndex(h => h.includes('銘柄名') || h === '会社名' || h === '名称');
+
+    let codeIdx = header.indexOf('証券コード');
+    if (codeIdx === -1) codeIdx = header.findIndex(h => h.includes('証券コード'));
+    let nameIdx = header.indexOf('提出者名');
+    if (nameIdx === -1) nameIdx = header.findIndex(h => h.includes('銘柄名') || h.includes('会社名'));
+    const statusIdx = header.indexOf('上場区分');
     if (codeIdx === -1 || nameIdx === -1) throw new Error('columns not found');
 
     companyList = rows.slice(1)
       .filter(r => r[codeIdx] && r[nameIdx])
-      .map(r => ({ code: r[codeIdx].trim(), name: r[nameIdx].trim() }));
+      .filter(r => statusIdx === -1 || r[statusIdx].trim() === '上場')
+      .map(r => {
+        let code = r[codeIdx].trim();
+        if (code.length === 5) code = code.slice(0, 4); // 末尾のチェックデジットを除去
+        return { code, name: r[nameIdx].trim() };
+      })
+      .filter((c, idx, arr) => arr.findIndex(x => x.code === c.code) === idx); // 重複除去
 
     els.searchStatus.textContent = `${companyList.length}銘柄から検索できます。`;
   } catch (e) {
@@ -440,6 +448,10 @@ async function loadConfig() {
     renderHoldings();
     els.holdingsCard.style.display = 'block';
     setStatus(els.connectStatus, 'ok', `読み込み完了(${holdings.length}銘柄)。下で編集できます。`);
+    try {
+      localStorage.setItem('stockAlertOwner', owner);
+      localStorage.setItem('stockAlertRepo', repo);
+    } catch (e) { /* ブラウザがストレージを許可していない場合は何もしない */ }
   } catch (e) {
     setStatus(els.connectStatus, 'err', e.message || '読み込みに失敗しました。');
   } finally {
@@ -613,6 +625,13 @@ document.addEventListener('click', (e) => {
 });
 
 loadCompanyList();
+
+try {
+  const savedOwner = localStorage.getItem('stockAlertOwner');
+  const savedRepo = localStorage.getItem('stockAlertRepo');
+  if (savedOwner) els.owner.value = savedOwner;
+  if (savedRepo) els.repo.value = savedRepo;
+} catch (e) { /* ブラウザがストレージを許可していない場合は何もしない */ }
 </script>
 </body>
 </html>
