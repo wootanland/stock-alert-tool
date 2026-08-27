@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>株価アラート設定ツール</title>
+<style>
+  :root {
+    --bg: #0f1512;
+    --panel: #161d19;
+    --panel-2: #1d2521;
+    --border: #2a332e;
+    --text: #e7ece9;
+    --text-dim: #8ea198;
+    --accent: #3fae7a;
+    --accent-dim: #2c7f59;
+    --danger: #d9634f;
+    --danger-dim: #8f3f32;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.6;
+    padding: 32px 16px 80px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  header { margin-bottom: 28px; }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: 0.01em;
+  }
+  header p { color: var(--text-dim); font-size: 14px; margin: 0; }
+
+  .ticker-strip {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  section.card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin: 0 0 16px;
+  }
+
+  label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+  input[type=text], input[type=password], input[type=number] {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 9px 11px;
+    font-size: 14px;
+    font-family: var(--mono);
+  }
+  input:focus { outline: none; border-color: var(--accent-dim); }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row4 { display: grid; grid-template-columns: 1.1fr 1.4fr 1fr 1fr auto; gap: 10px; align-items: end; }
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+
+  button {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 6px;
+    border: none;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #05130c; }
+  .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger-dim); padding: 9px 12px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+    font-weight: 500;
+    padding: 0 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 10px 8px; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  tr:last-child td { border-bottom: none; }
+  td.name-cell { font-family: inherit; }
+  .badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .empty-state {
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 12px 0;
+    text-align: center;
+  }
+
+  .add-block {
+    border-top: 1px solid var(--border);
+    margin-top: 16px;
+    padding-top: 16px;
+  }
+
+  .status {
+    font-size: 13px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    margin-top: 14px;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.ok { background: rgba(63,174,122,0.12); color: var(--accent); border: 1px solid var(--accent-dim); }
+  .status.err { background: rgba(217,99,79,0.12); color: var(--danger); border: 1px solid var(--danger-dim); }
+  .status.pending { background: rgba(142,161,152,0.1); color: var(--text-dim); border: 1px solid var(--border); }
+
+  .actions-bar { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+
+  .help {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 10px;
+  }
+  .help a { color: var(--accent); }
+
+  .price-link { color: var(--text-dim); text-decoration: none; font-size: 12px; }
+  .price-link:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="ticker-strip">stock-alert / config editor</div>
+    <h1>株価アラート設定ツール</h1>
+    <p>GitHubの config.yaml を、画面から直接読み書きします。</p>
+  </header>
+
+  <section class="card" id="connect-card">
+    <h2>接続設定</h2>
+    <div class="field row2">
+      <div>
+        <label for="repo-owner">GitHubユーザー名</label>
+        <input type="text" id="repo-owner" placeholder="例: wootanland">
+      </div>
+      <div>
+        <label for="repo-name">リポジトリ名</label>
+        <input type="text" id="repo-name" placeholder="例: stock-alert">
+      </div>
+    </div>
+    <div class="field">
+      <label for="pat">Personal Access Token</label>
+      <input type="password" id="pat" placeholder="ghp_... または github_pat_...">
+    </div>
+    <div class="actions-bar">
+      <button class="btn-primary" id="load-btn">読み込む</button>
+    </div>
+    <div class="help">
+      トークンはこの画面を開いている間だけメモリ上に保持され、保存やどこかへの送信は行いません(GitHubへの通信のみ)。
+      持っていない場合は <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">こちらでFine-grained tokenを作成</a>し、
+      対象リポジトリをこの stock-alert リポジトリのみに限定、Permissions の <strong>Contents: Read and write</strong> を選んで発行してください。
+    </div>
+    <div class="status" id="connect-status"></div>
+  </section>
+
+  <section class="card" id="holdings-card" style="display:none;">
+    <h2>監視銘柄</h2>
+    <table id="holdings-table">
+      <thead>
+        <tr>
+          <th>コード</th>
+          <th>銘柄名</th>
+          <th>買い(以下)</th>
+          <th>売り(以上)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="holdings-body"></tbody>
+    </table>
+    <div class="empty-state" id="empty-state" style="display:none;">まだ銘柄が登録されていません</div>
+
+    <div class="add-block">
+      <div class="row4">
+        <div>
+          <label>コード</label>
+          <input type="text" id="new-ticker" placeholder="7203">
+        </div>
+        <div>
+          <label>銘柄名</label>
+          <input type="text" id="new-name" placeholder="トヨタ自動車">
+        </div>
+        <div>
+          <label>買い(以下)</label>
+          <input type="number" id="new-buy" placeholder="2500">
+        </div>
+        <div>
+          <label>売り(以上)</label>
+          <input type="number" id="new-sell" placeholder="3200">
+        </div>
+        <div>
+          <button class="btn-ghost" id="add-btn">追加</button>
+        </div>
+      </div>
+      <div class="help">コードは4桁の証券コード(例: 7203)か、キオクシアのような英数字コード(例: 285A)を入力してください。「.T」は自動で付きます。買い・売りはどちらか片方だけでも構いません。</div>
+    </div>
+
+    <div class="actions-bar">
+      <button class="btn-primary" id="save-btn">GitHubに保存</button>
+    </div>
+    <div class="status" id="save-status"></div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script>
+let holdings = [];
+let currentSha = null;
+
+const els = {
+  owner: document.getElementById('repo-owner'),
+  repo: document.getElementById('repo-name'),
+  pat: document.getElementById('pat'),
+  loadBtn: document.getElementById('load-btn'),
+  connectStatus: document.getElementById('connect-status'),
+  holdingsCard: document.getElementById('holdings-card'),
+  body: document.getElementById('holdings-body'),
+  emptyState: document.getElementById('empty-state'),
+  newTicker: document.getElementById('new-ticker'),
+  newName: document.getElementById('new-name'),
+  newBuy: document.getElementById('new-buy'),
+  newSell: document.getElementById('new-sell'),
+  addBtn: document.getElementById('add-btn'),
+  saveBtn: document.getElementById('save-btn'),
+  saveStatus: document.getElementById('save-status'),
+};
+
+function setStatus(el, kind, msg) {
+  el.className = 'status show ' + kind;
+  el.textContent = msg;
+}
+function clearStatus(el) {
+  el.className = 'status';
+  el.textContent = '';
+}
+
+function normalizeTicker(raw) {
+  let t = raw.trim().toUpperCase();
+  if (!t) return t;
+  if (!t.endsWith('.T')) t = t + '.T';
+  return t;
+}
+
+function apiHeaders(pat) {
+  return {
+    'Authorization': 'Bearer ' + pat,
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+}
+
+function b64DecodeUtf8(b64) {
+  const binary = atob(b64.replace(/\n/g, ''));
+  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+  return new TextDecoder('utf-8').decode(bytes);
+}
+function b64EncodeUtf8(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return btoa(binary);
+}
+
+async function loadConfig() {
+  const owner = els.owner.value.trim();
+  const repo = els.repo.value.trim();
+  const pat = els.pat.value.trim();
+  if (!owner || !repo || !pat) {
+    setStatus(els.connectStatus, 'err', 'ユーザー名・リポジトリ名・トークンを全て入力してください。');
+    return;
+  }
+  setStatus(els.connectStatus, 'pending', '読み込み中…');
+  els.loadBtn.disabled = true;
+  try {
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/config.yaml`;
+    const res = await fetch(url, { headers: apiHeaders(pat) });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`GitHubからの読み込みに失敗しました (${res.status}). トークンの権限やリポジトリ名を確認してください。`);
+    }
+    const data = await res.json();
+    currentSha = data.sha;
+    const text = b64DecodeUtf8(data.content);
+    const parsed = jsyaml.load(text) || {};
+    holdings = Array.isArray(parsed.holdings) ? parsed.holdings.map(h => ({
+      ticker: h.ticker || '',
+      name: h.name || '',
+      buy_below: h.buy_below ?? '',
+      sell_above: h.sell_above ?? '',
+    })) : [];
+    renderHoldings();
+    els.holdingsCard.style.display = 'block';
+    setStatus(els.connectStatus, 'ok', `読み込み完了(${holdings.length}銘柄)。下で編集できます。`);
+  } catch (e) {
+    setStatus(els.connectStatus, 'err', e.message || '読み込みに失敗しました。');
+  } finally {
+    els.loadBtn.disabled = false;
+  }
+}
+
+function renderHoldings() {
+  els.body.innerHTML = '';
+  els.emptyState.style.display = holdings.length ? 'none' : 'block';
+  holdings.forEach((h, idx) => {
+    const tr = document.createElement('tr');
+
+    const tdTicker = document.createElement('td');
+    tdTicker.innerHTML = `<span class="badge">${h.ticker}</span><br><a class="price-link" href="https://finance.yahoo.co.jp/quote/${h.ticker}" target="_blank" rel="noopener">現在値を見る ↗</a>`;
+    tr.appendChild(tdTicker);
+
+    const tdName = document.createElement('td');
+    tdName.className = 'name-cell';
+    tdName.textContent = h.name;
+    tr.appendChild(tdName);
+
+    const tdBuy = document.createElement('td');
+    const buyInput = document.createElement('input');
+    buyInput.type = 'number';
+    buyInput.value = h.buy_below;
+    buyInput.style.width = '90px';
+    buyInput.addEventListener('input', () => holdings[idx].buy_below = buyInput.value === '' ? '' : Number(buyInput.value));
+    tdBuy.appendChild(buyInput);
+    tr.appendChild(tdBuy);
+
+    const tdSell = document.createElement('td');
+    const sellInput = document.createElement('input');
+    sellInput.type = 'number';
+    sellInput.value = h.sell_above;
+    sellInput.style.width = '90px';
+    sellInput.addEventListener('input', () => holdings[idx].sell_above = sellInput.value === '' ? '' : Number(sellInput.value));
+    tdSell.appendChild(sellInput);
+    tr.appendChild(tdSell);
+
+    const tdDel = document.createElement('td');
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-danger';
+    delBtn.textContent = '削除';
+    delBtn.addEventListener('click', () => {
+      holdings.splice(idx, 1);
+      renderHoldings();
+    });
+    tdDel.appendChild(delBtn);
+    tr.appendChild(tdDel);
+
+    els.body.appendChild(tr);
+  });
+}
+
+function addHolding() {
+  const tickerRaw = els.newTicker.value.trim();
+  const name = els.newName.value.trim();
+  const buy = els.newBuy.value.trim();
+  const sell = els.newSell.value.trim();
+
+  if (!tickerRaw || !name) {
+    setStatus(els.saveStatus, 'err', 'コードと銘柄名は必須です。');
+    return;
+  }
+  if (!buy && !sell) {
+    setStatus(els.saveStatus, 'err', '買い・売りのどちらか一方は価格を入力してください。');
+    return;
+  }
+
+  const ticker = normalizeTicker(tickerRaw);
+  const entry = { ticker, name };
+  if (buy) entry.buy_below = Number(buy);
+  else entry.buy_below = '';
+  if (sell) entry.sell_above = Number(sell);
+  else entry.sell_above = '';
+
+  holdings.push(entry);
+  renderHoldings();
+  clearStatus(els.saveStatus);
+
+  els.newTicker.value = '';
+  els.newName.value = '';
+  els.newBuy.value = '';
+  els.newSell.value = '';
+}
+
+function buildYaml() {
+  const header =
+`# 監視したい銘柄と、アラートを出す価格を設定してください。
+# ticker はティッカーコードの末尾に ".T" を付けます(東証の場合)。
+#   例: トヨタ自動車(7203) -> "7203.T"
+#
+# buy_below  : この価格「以下」になったら買いシグナルとして通知
+# sell_above : この価格「以上」になったら売りシグナルとして通知
+# どちらか片方だけの設定でも構いません(その項目自体を削除してください)。
+
+holdings:
+`;
+  const footer =
+`
+  # 銘柄を追加する場合はこの形式でコピーして増やしてください
+  # - ticker: "XXXX.T"
+  #   name: "銘柄名"
+  #   buy_below: 0
+  #   sell_above: 0
+`;
+  const body = holdings.map(h => {
+    let block = `  - ticker: "${h.ticker}"\n    name: "${h.name}"\n`;
+    if (h.buy_below !== '' && h.buy_below !== null && h.buy_below !== undefined) {
+      block += `    buy_below: ${h.buy_below}\n`;
+    }
+    if (h.sell_above !== '' && h.sell_above !== null && h.sell_above !== undefined) {
+      block += `    sell_above: ${h.sell_above}\n`;
+    }
+    return block;
+  }).join('\n');
+
+  return header + body + footer;
+}
+
+async function saveConfig() {
+  const owner = els.owner.value.trim();
+  const repo = els.repo.value.trim();
+  const pat = els.pat.value.trim();
+  if (!currentSha) {
+    setStatus(els.saveStatus, 'err', '先に「読み込む」を実行してください。');
+    return;
+  }
+  if (!holdings.length) {
+    setStatus(els.saveStatus, 'err', '銘柄が1つもありません。');
+    return;
+  }
+
+  setStatus(els.saveStatus, 'pending', '保存中…');
+  els.saveBtn.disabled = true;
+  try {
+    const newContent = buildYaml();
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/config.yaml`;
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: apiHeaders(pat),
+      body: JSON.stringify({
+        message: 'Update config.yaml via web tool',
+        content: b64EncodeUtf8(newContent),
+        sha: currentSha,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`保存に失敗しました (${res.status})。`);
+    }
+    const data = await res.json();
+    currentSha = data.content.sha;
+    setStatus(els.saveStatus, 'ok', '保存しました。次回のActions実行から反映されます。');
+  } catch (e) {
+    setStatus(els.saveStatus, 'err', e.message || '保存に失敗しました。');
+  } finally {
+    els.saveBtn.disabled = false;
+  }
+}
+
+els.loadBtn.addEventListener('click', loadConfig);
+els.addBtn.addEventListener('click', addHolding);
+els.saveBtn.addEventListener('click', saveConfig);
+</script>
+</body>
+</html>
