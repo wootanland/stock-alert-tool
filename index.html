@@ -152,6 +152,30 @@
 
   .price-link { color: var(--text-dim); text-decoration: none; font-size: 12px; }
   .price-link:hover { color: var(--accent); }
+
+  .search-results {
+    position: absolute;
+    left: 0; right: 0; top: 100%;
+    margin-top: 4px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    max-height: 260px;
+    overflow-y: auto;
+    z-index: 10;
+  }
+  .search-results div {
+    padding: 9px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .search-results div:last-child { border-bottom: none; }
+  .search-results div:hover { background: rgba(63,174,122,0.12); }
+  .search-results .s-code { font-family: var(--mono); color: var(--text-dim); font-size: 12px; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -190,7 +214,15 @@
   </section>
 
   <section class="card" id="holdings-card" style="display:none;">
-    <h2>監視銘柄</h2>
+    <h2>銘柄を検索して追加</h2>
+    <div class="field" style="position:relative;">
+      <label for="search-input">会社名またはコードで検索</label>
+      <input type="text" id="search-input" placeholder="例: トヨタ / 7203 / キオクシア" autocomplete="off">
+      <div id="search-results" class="search-results" style="display:none;"></div>
+    </div>
+    <div class="help" id="search-status">銘柄データを読み込み中…</div>
+
+    <h2 style="margin-top:22px;">監視銘柄</h2>
     <table id="holdings-table">
       <thead>
         <tr>
@@ -258,7 +290,89 @@ const els = {
   addBtn: document.getElementById('add-btn'),
   saveBtn: document.getElementById('save-btn'),
   saveStatus: document.getElementById('save-status'),
+  searchInput: document.getElementById('search-input'),
+  searchResults: document.getElementById('search-results'),
+  searchStatus: document.getElementById('search-status'),
 };
+
+let companyList = [];
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else { inQuotes = false; }
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(field); field = '';
+        if (row.length > 1 || row[0] !== '') rows.push(row);
+        row = [];
+      } else field += c;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+async function loadCompanyList() {
+  try {
+    const res = await fetch('https://raw.githubusercontent.com/code4fukui/EDINET/main/data/seccode.csv');
+    if (!res.ok) throw new Error('fetch failed');
+    const text = await res.text();
+    const rows = parseCSV(text);
+    if (!rows.length) throw new Error('empty');
+    const header = rows[0].map(h => h.trim());
+    let codeIdx = header.indexOf('コード');
+    let nameIdx = header.indexOf('銘柄名');
+    if (codeIdx === -1) codeIdx = header.findIndex(h => h.includes('コード') && !h.includes('業種') && !h.includes('規模') && !h.includes('EDINET'));
+    if (nameIdx === -1) nameIdx = header.findIndex(h => h.includes('銘柄名') || h === '会社名' || h === '名称');
+    if (codeIdx === -1 || nameIdx === -1) throw new Error('columns not found');
+
+    companyList = rows.slice(1)
+      .filter(r => r[codeIdx] && r[nameIdx])
+      .map(r => ({ code: r[codeIdx].trim(), name: r[nameIdx].trim() }));
+
+    els.searchStatus.textContent = `${companyList.length}銘柄から検索できます。`;
+  } catch (e) {
+    els.searchStatus.textContent = '銘柄検索データの読み込みに失敗しました。コードと銘柄名は手入力してください。';
+  }
+}
+
+function runSearch(query) {
+  const q = query.trim();
+  if (!q) { els.searchResults.style.display = 'none'; return; }
+  const qUpper = q.toUpperCase();
+  const matches = companyList.filter(c => c.code.startsWith(qUpper) || c.name.includes(q)).slice(0, 8);
+  if (!matches.length) { els.searchResults.style.display = 'none'; return; }
+  els.searchResults.innerHTML = '';
+  matches.forEach(m => {
+    const row = document.createElement('div');
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = m.name;
+    const codeSpan = document.createElement('span');
+    codeSpan.className = 's-code';
+    codeSpan.textContent = m.code;
+    row.appendChild(nameSpan);
+    row.appendChild(codeSpan);
+    row.addEventListener('click', () => {
+      els.newTicker.value = m.code;
+      els.newName.value = m.name;
+      els.searchInput.value = '';
+      els.searchResults.style.display = 'none';
+      els.newBuy.focus();
+    });
+    els.searchResults.appendChild(row);
+  });
+  els.searchResults.style.display = 'block';
+}
 
 function setStatus(el, kind, msg) {
   el.className = 'status show ' + kind;
@@ -491,6 +605,14 @@ async function saveConfig() {
 els.loadBtn.addEventListener('click', loadConfig);
 els.addBtn.addEventListener('click', addHolding);
 els.saveBtn.addEventListener('click', saveConfig);
+els.searchInput.addEventListener('input', () => runSearch(els.searchInput.value));
+document.addEventListener('click', (e) => {
+  if (!els.searchResults.contains(e.target) && e.target !== els.searchInput) {
+    els.searchResults.style.display = 'none';
+  }
+});
+
+loadCompanyList();
 </script>
 </body>
 </html>
