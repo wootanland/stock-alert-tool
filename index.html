@@ -309,6 +309,18 @@ const COMPANY_ALIASES = {
   'SBI': '8473', 'GMO': '9449',
 };
 
+// 旧字体 -> 新字体の変換表(社名でよく使われるもののみ)。
+// 検索文字列・会社名の両方をこれで正規化してから比較することで、
+// 「渋沢倉庫」で検索しても正式社名「澁澤倉庫」がヒットするようにする。
+const KYUJITAI_MAP = {
+  '澁': '渋', '澤': '沢', '國': '国', '學': '学', '會': '会',
+  '龍': '竜', '髙': '高', '﨑': '崎', '櫻': '桜', '眞': '真',
+  '德': '徳', '廣': '広', '藝': '芸', '關': '関', '禮': '礼',
+};
+function normalizeKanji(str) {
+  return str.replace(/./g, ch => KYUJITAI_MAP[ch] || ch);
+}
+
 function parseCSV(text) {
   const rows = [];
   let row = [], field = '', inQuotes = false;
@@ -356,7 +368,8 @@ async function loadCompanyList() {
       .map(r => {
         let code = r[codeIdx].trim();
         if (code.length === 5) code = code.slice(0, 4); // 末尾のチェックデジットを除去
-        return { code, name: r[nameIdx].trim() };
+        const name = r[nameIdx].trim();
+        return { code, name, nameNorm: normalizeKanji(name) };
       })
       .filter((c, idx, arr) => arr.findIndex(x => x.code === c.code) === idx); // 重複除去
 
@@ -371,7 +384,8 @@ function runSearch(query) {
   const q = query.trim();
   if (!q) { els.searchResults.style.display = 'none'; return; }
   const qUpper = q.toUpperCase();
-  let matches = companyList.filter(c => c.code.startsWith(qUpper) || c.name.includes(q));
+  const qNorm = normalizeKanji(q);
+  let matches = companyList.filter(c => c.code.startsWith(qUpper) || c.name.includes(q) || c.nameNorm.includes(qNorm));
 
   const aliasCode = COMPANY_ALIASES[qUpper];
   if (aliasCode) {
