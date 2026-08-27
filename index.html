@@ -191,11 +191,11 @@
     <div class="field row2">
       <div>
         <label for="repo-owner">GitHubユーザー名</label>
-        <input type="text" id="repo-owner" placeholder="例: wootanland">
+        <input type="text" id="repo-owner" placeholder="例: wootanland" value="wootanland">
       </div>
       <div>
         <label for="repo-name">リポジトリ名</label>
-        <input type="text" id="repo-name" placeholder="例: stock-alert">
+        <input type="text" id="repo-name" placeholder="例: stock-alert" value="stock-alert">
       </div>
     </div>
     <div class="field">
@@ -221,6 +221,7 @@
       <div id="search-results" class="search-results" style="display:none;"></div>
     </div>
     <div class="help" id="search-status">銘柄データを読み込み中…</div>
+    <div class="help">NTT・KDDI・JT・ANA・JALなど一部の主要な略称は対応表で拾えますが、それ以外の略称(正式名称に含まれないもの)はヒットしないことがあります。その場合は正式名称の一部で検索してください。</div>
 
     <h2 style="margin-top:22px;">監視銘柄</h2>
     <table id="holdings-table">
@@ -297,6 +298,17 @@ const els = {
 
 let companyList = [];
 
+// データ上の正式社名には出てこない、よく使われるアルファベット略称の対応表(証券コード)
+const COMPANY_ALIASES = {
+  'NTT': '9432', 'KDDI': '9433',
+  'JT': '2914',
+  'ANA': '9202', 'JAL': '9201',
+  'MUFG': '8306', 'SMFG': '8316',
+  'ENEOS': '5020', 'JFE': '5411',
+  'IHI': '7013', 'TDK': '6762',
+  'SBI': '8473', 'GMO': '9449',
+};
+
 function parseCSV(text) {
   const rows = [];
   let row = [], field = '', inQuotes = false;
@@ -350,7 +362,8 @@ async function loadCompanyList() {
 
     els.searchStatus.textContent = `${companyList.length}銘柄から検索できます。`;
   } catch (e) {
-    els.searchStatus.textContent = '銘柄検索データの読み込みに失敗しました。コードと銘柄名は手入力してください。';
+    console.error('銘柄データ読み込みエラー:', e);
+    els.searchStatus.textContent = `銘柄検索データの読み込みに失敗しました(${e.message || e})。コードと銘柄名は手入力してください。`;
   }
 }
 
@@ -358,7 +371,17 @@ function runSearch(query) {
   const q = query.trim();
   if (!q) { els.searchResults.style.display = 'none'; return; }
   const qUpper = q.toUpperCase();
-  const matches = companyList.filter(c => c.code.startsWith(qUpper) || c.name.includes(q)).slice(0, 8);
+  let matches = companyList.filter(c => c.code.startsWith(qUpper) || c.name.includes(q));
+
+  const aliasCode = COMPANY_ALIASES[qUpper];
+  if (aliasCode) {
+    const aliasMatch = companyList.find(c => c.code === aliasCode);
+    if (aliasMatch) {
+      matches = [aliasMatch, ...matches.filter(m => m.code !== aliasMatch.code)];
+    }
+  }
+
+  matches = matches.slice(0, 8);
   if (!matches.length) { els.searchResults.style.display = 'none'; return; }
   els.searchResults.innerHTML = '';
   matches.forEach(m => {
