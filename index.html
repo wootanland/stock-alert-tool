@@ -77,7 +77,7 @@
 
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .row4 { display: grid; grid-template-columns: 1.1fr 1.4fr 1fr 1fr auto; gap: 10px; align-items: end; }
-  .row6 { display: grid; grid-template-columns: 1fr 1.3fr 0.8fr 0.8fr 0.8fr 0.8fr auto; gap: 8px; align-items: end; }
+  .row6 { display: grid; grid-template-columns: 1fr 1.3fr 0.8fr 0.8fr 0.8fr 0.8fr 0.9fr auto; gap: 8px; align-items: end; }
   .field { margin-bottom: 14px; }
   .field:last-child { margin-bottom: 0; }
 
@@ -199,6 +199,56 @@
   }
   .order-btns button:hover { color: var(--text); }
   .date-cell { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+
+  /* --- スマホなど狭い画面ではテーブルをカード表示に切り替える --- */
+  @media (max-width: 720px) {
+    body { padding: 16px 10px 80px; }
+    .row6 { grid-template-columns: 1fr 1fr; }
+    .row6 > div:nth-child(2) { grid-column: 1 / -1; }
+    .row6 > div:last-child { grid-column: 1 / -1; }
+    .row6 button#add-btn { width: 100%; padding: 12px; }
+
+    #holdings-table thead { display: none; }
+    #holdings-table, #holdings-table tbody, #holdings-table tr, #holdings-table td {
+      display: block;
+      width: 100%;
+    }
+    #holdings-table tr {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+      position: relative;
+    }
+    #holdings-table td {
+      border-bottom: none;
+      padding: 6px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    #holdings-table td[data-label]::before {
+      content: attr(data-label);
+      color: var(--text-dim);
+      font-size: 12px;
+      font-family: inherit;
+      flex-shrink: 0;
+    }
+    #holdings-table td input {
+      width: 130px !important;
+      text-align: right;
+    }
+    #holdings-table td.name-cell {
+      font-size: 15px;
+      font-weight: 600;
+      justify-content: flex-start;
+    }
+    #holdings-table td.name-cell::before { content: none; }
+    #holdings-table .drag-handle { display: none; } /* タッチだと誤操作しやすいので非表示、▲▼のみ使う */
+    #holdings-table .order-btns { flex-direction: row; }
+    #holdings-table .btn-danger { width: 100%; margin-top: 4px; }
+  }
 </style>
 </head>
 <body>
@@ -258,6 +308,7 @@
           <th>買い株数</th>
           <th>売り(以上)</th>
           <th>売り株数</th>
+          <th>損切り(以下)</th>
           <th>設定日</th>
           <th></th>
           <th></th>
@@ -295,10 +346,14 @@
           <input type="number" id="new-sell-shares" placeholder="任意">
         </div>
         <div>
+          <label>損切り(以下)</label>
+          <input type="number" id="new-stoploss" placeholder="任意">
+        </div>
+        <div>
           <button class="btn-ghost" id="add-btn">追加</button>
         </div>
       </div>
-      <div class="help">コードは4桁の証券コード(例: 7203)か、キオクシアのような英数字コード(例: 285A)を入力してください。「.T」は自動で付きます。買い・売りはどちらか片方だけでも構いません。株数は空欄のままでも大丈夫です(指定すると通知に「◯株買い/売り」と添えられます)。</div>
+      <div class="help">コードは4桁の証券コード(例: 7203)か、キオクシアのような英数字コード(例: 285A)を入力してください。「.T」は自動で付きます。買い・売り・損切りはどれも任意で、必要なものだけ設定してください。損切りは「買い(以下)」とは別枠で判定されるので、買い値より下に設定して撤退の目安として使えます。株数も空欄のままで大丈夫です。</div>
     </div>
 
     <div class="actions-bar">
@@ -328,6 +383,7 @@ const els = {
   newSell: document.getElementById('new-sell'),
   newBuyShares: document.getElementById('new-buy-shares'),
   newSellShares: document.getElementById('new-sell-shares'),
+  newStoploss: document.getElementById('new-stoploss'),
   addBtn: document.getElementById('add-btn'),
   saveBtn: document.getElementById('save-btn'),
   saveStatus: document.getElementById('save-status'),
@@ -532,6 +588,7 @@ async function loadConfig() {
       sell_above: h.sell_above ?? '',
       buy_shares: h.buy_shares ?? '',
       sell_shares: h.sell_shares ?? '',
+      stop_loss_below: h.stop_loss_below ?? '',
       updated_at: h.updated_at || '',
     })) : [];
     renderHoldings();
@@ -587,6 +644,7 @@ function renderHoldings() {
     tr.appendChild(tdHandle);
 
     const tdTicker = document.createElement('td');
+    tdTicker.setAttribute('data-label', 'コード');
     tdTicker.innerHTML = `<span class="badge">${h.ticker}</span><br><a class="price-link" href="https://finance.yahoo.co.jp/quote/${h.ticker}" target="_blank" rel="noopener">現在値を見る ↗</a>`;
     tr.appendChild(tdTicker);
 
@@ -598,6 +656,7 @@ function renderHoldings() {
     const markUpdated = () => { holdings[idx].updated_at = todayStr(); dateCell.textContent = holdings[idx].updated_at || '-'; };
 
     const tdBuy = document.createElement('td');
+    tdBuy.setAttribute('data-label', '買い(以下)');
     const buyInput = document.createElement('input');
     buyInput.type = 'number';
     buyInput.value = h.buy_below;
@@ -607,6 +666,7 @@ function renderHoldings() {
     tr.appendChild(tdBuy);
 
     const tdBuyShares = document.createElement('td');
+    tdBuyShares.setAttribute('data-label', '買い株数');
     const buySharesInput = document.createElement('input');
     buySharesInput.type = 'number';
     buySharesInput.placeholder = '任意';
@@ -617,6 +677,7 @@ function renderHoldings() {
     tr.appendChild(tdBuyShares);
 
     const tdSell = document.createElement('td');
+    tdSell.setAttribute('data-label', '売り(以上)');
     const sellInput = document.createElement('input');
     sellInput.type = 'number';
     sellInput.value = h.sell_above;
@@ -626,6 +687,7 @@ function renderHoldings() {
     tr.appendChild(tdSell);
 
     const tdSellShares = document.createElement('td');
+    tdSellShares.setAttribute('data-label', '売り株数');
     const sellSharesInput = document.createElement('input');
     sellSharesInput.type = 'number';
     sellSharesInput.placeholder = '任意';
@@ -635,8 +697,20 @@ function renderHoldings() {
     tdSellShares.appendChild(sellSharesInput);
     tr.appendChild(tdSellShares);
 
+    const tdStoploss = document.createElement('td');
+    tdStoploss.setAttribute('data-label', '損切り(以下)');
+    const stoplossInput = document.createElement('input');
+    stoplossInput.type = 'number';
+    stoplossInput.placeholder = '任意';
+    stoplossInput.value = h.stop_loss_below;
+    stoplossInput.style.width = '90px';
+    stoplossInput.addEventListener('input', () => { holdings[idx].stop_loss_below = stoplossInput.value === '' ? '' : Number(stoplossInput.value); markUpdated(); });
+    tdStoploss.appendChild(stoplossInput);
+    tr.appendChild(tdStoploss);
+
     const tdDate = document.createElement('td');
-    tdDate.className = 'date-cell';
+    tdDate.setAttribute('data-label', '設定日');
+    tdDate.classList.add('date-cell');
     tdDate.textContent = h.updated_at || '-';
     tr.appendChild(tdDate);
     const dateCell = tdDate;
@@ -687,13 +761,14 @@ function addHolding() {
   const sell = els.newSell.value.trim();
   const buyShares = els.newBuyShares.value.trim();
   const sellShares = els.newSellShares.value.trim();
+  const stoploss = els.newStoploss.value.trim();
 
   if (!tickerRaw || !name) {
     setStatus(els.saveStatus, 'err', 'コードと銘柄名は必須です。');
     return;
   }
-  if (!buy && !sell) {
-    setStatus(els.saveStatus, 'err', '買い・売りのどちらか一方は価格を入力してください。');
+  if (!buy && !sell && !stoploss) {
+    setStatus(els.saveStatus, 'err', '買い・売り・損切りのいずれか1つは価格を入力してください。');
     return;
   }
 
@@ -703,6 +778,7 @@ function addHolding() {
   entry.sell_above = sell ? Number(sell) : '';
   entry.buy_shares = buyShares ? Number(buyShares) : '';
   entry.sell_shares = sellShares ? Number(sellShares) : '';
+  entry.stop_loss_below = stoploss ? Number(stoploss) : '';
   entry.updated_at = todayStr();
 
   holdings.push(entry);
@@ -715,6 +791,7 @@ function addHolding() {
   els.newSell.value = '';
   els.newBuyShares.value = '';
   els.newSellShares.value = '';
+  els.newStoploss.value = '';
 }
 
 function buildYaml() {
@@ -723,12 +800,13 @@ function buildYaml() {
 # ticker はティッカーコードの末尾に ".T" を付けます(東証の場合)。
 #   例: トヨタ自動車(7203) -> "7203.T"
 #
-# buy_below   : この価格「以下」になったら買いシグナルとして通知
-# sell_above  : この価格「以上」になったら売りシグナルとして通知
-# buy_shares  : 指定すると、買いシグナル通知に「◯株買い」と添える(任意)
-# sell_shares : 指定すると、売りシグナル通知に「◯株売り」と添える(任意)
-# updated_at  : この銘柄を設定・変更した日付(Web設定ツールが自動で記録します)
-# どちらか片方だけの設定でも構いません(その項目自体を削除してください)。
+# buy_below       : この価格「以下」になったら買いシグナルとして通知
+# sell_above      : この価格「以上」になったら売り(利確)シグナルとして通知
+# stop_loss_below : この価格「以下」になったら撤退(損切り)シグナルとして通知(buy_belowとは別枠)
+# buy_shares      : 指定すると、買いシグナル通知に「◯株買い」と添える(任意)
+# sell_shares     : 指定すると、売り・損切りシグナル通知に「◯株売り」と添える(任意)
+# updated_at      : この銘柄を設定・変更した日付(Web設定ツールが自動で記録します)
+# いずれも任意です(不要な項目は削除してください)。
 
 holdings:
 `;
@@ -739,6 +817,7 @@ holdings:
   #   name: "銘柄名"
   #   buy_below: 0
   #   sell_above: 0
+  #   stop_loss_below: 0
   #   buy_shares: 0
   #   sell_shares: 0
 `;
@@ -755,6 +834,9 @@ holdings:
     }
     if (h.sell_shares !== '' && h.sell_shares !== null && h.sell_shares !== undefined) {
       block += `    sell_shares: ${h.sell_shares}\n`;
+    }
+    if (h.stop_loss_below !== '' && h.stop_loss_below !== null && h.stop_loss_below !== undefined) {
+      block += `    stop_loss_below: ${h.stop_loss_below}\n`;
     }
     if (h.updated_at) {
       block += `    updated_at: "${h.updated_at}"\n`;
