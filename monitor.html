@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>保有銘柄モニター設定</title>
+<style>
+  :root {
+    --bg: #0f1512;
+    --panel: #161d19;
+    --panel-2: #1d2521;
+    --border: #2a332e;
+    --text: #e7ece9;
+    --text-dim: #8ea198;
+    --accent: #3fae7a;
+    --accent-dim: #2c7f59;
+    --danger: #d9634f;
+    --danger-dim: #8f3f32;
+    --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.6;
+    padding: 32px 16px 80px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  header { margin-bottom: 28px; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; letter-spacing: 0.01em; }
+  header p { color: var(--text-dim); font-size: 14px; margin: 0; }
+  .ticker-strip {
+    font-family: var(--mono); font-size: 11px; color: var(--accent-dim);
+    letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px;
+  }
+  .nav-link { font-size: 12px; margin-top: 8px; display: inline-block; color: var(--accent); }
+
+  section.card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px; margin-bottom: 20px;
+  }
+  .card h2 {
+    font-size: 13px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-dim); margin: 0 0 16px;
+  }
+  label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+  input[type=text], input[type=password], input[type=number], select {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); padding: 9px 11px;
+    font-size: 14px; font-family: var(--mono);
+  }
+  input:focus, select:focus { outline: none; border-color: var(--accent-dim); }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .manual-row { display: grid; grid-template-columns: 1fr 2fr auto; gap: 10px; align-items: end; }
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+
+  button {
+    font-family: inherit; font-size: 14px; font-weight: 500; border-radius: 6px;
+    border: none; padding: 10px 16px; cursor: pointer; transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #05130c; }
+  .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); }
+  .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger-dim); padding: 9px 12px; }
+
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-dim); font-weight: 500; padding: 0 8px 10px; border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td { padding: 10px 8px; border-bottom: 1px solid var(--border); font-family: var(--mono); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td.name-cell { font-family: inherit; }
+  .badge { display: inline-block; font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+  .price-link { color: var(--text-dim); text-decoration: none; font-size: 12px; }
+  .price-link:hover { color: var(--accent); }
+  .empty-state { color: var(--text-dim); font-size: 13px; padding: 12px 0; text-align: center; }
+
+  td.fm-cell select { width: 84px; }
+  td.cost-cell input { width: 100px; }
+  td.shares-cell input { width: 84px; }
+  td.val-cell { min-width: 190px; }
+  .pos-summary { font-size: 12px; line-height: 1.6; color: var(--text-dim); font-family: var(--mono); }
+  .pnl-pos { color: var(--accent); }
+  .pnl-neg { color: var(--danger); }
+
+  .totals {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 14px;
+  }
+  .totals .t-label { font-size: 11px; color: var(--text-dim); }
+  .totals .t-value { font-size: 16px; font-family: var(--mono); font-weight: 600; }
+
+  .drag-handle { cursor: grab; color: var(--text-dim); font-size: 16px; user-select: none; padding: 0 4px; }
+  tr.dragging { opacity: 0.4; }
+  tr.drag-over { border-top: 2px solid var(--accent); }
+  .order-btns { display: flex; flex-direction: column; gap: 2px; }
+  .order-btns button {
+    padding: 2px 6px; font-size: 11px; line-height: 1; background: transparent;
+    border: 1px solid var(--border); color: var(--text-dim);
+  }
+  .order-btns button:hover { color: var(--text); }
+
+  .status { font-size: 13px; padding: 10px 12px; border-radius: 6px; margin-top: 14px; display: none; }
+  .status.show { display: block; }
+  .status.ok { background: rgba(63,174,122,0.12); color: var(--accent); border: 1px solid var(--accent-dim); }
+  .status.err { background: rgba(217,99,79,0.12); color: var(--danger); border: 1px solid var(--danger-dim); }
+  .status.pending { background: rgba(142,161,152,0.1); color: var(--text-dim); border: 1px solid var(--border); }
+  .actions-bar { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+  .help { font-size: 12px; color: var(--text-dim); margin-top: 10px; }
+  .help a { color: var(--accent); }
+
+  .search-results {
+    position: absolute; left: 0; right: 0; top: 100%; margin-top: 4px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    max-height: 260px; overflow-y: auto; z-index: 10;
+  }
+  .search-results div {
+    padding: 9px 12px; font-size: 13px; cursor: pointer; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; gap: 10px;
+  }
+  .search-results div:last-child { border-bottom: none; }
+  .search-results div:hover { background: rgba(63,174,122,0.12); }
+  .search-results .s-code { font-family: var(--mono); color: var(--text-dim); font-size: 12px; white-space: nowrap; }
+
+  /* --- スマホなど狭い画面ではテーブルをカード表示に切り替える --- */
+  @media (max-width: 720px) {
+    body { padding: 16px 10px 80px; }
+    .row2 { grid-template-columns: 1fr; }
+    .manual-row { grid-template-columns: 1fr 1fr; }
+    .manual-row > div:last-child { grid-column: 1 / -1; }
+    .manual-row button { width: 100%; padding: 12px; }
+    .totals { grid-template-columns: 1fr; }
+
+    #holdings-table thead { display: none; }
+    #holdings-table, #holdings-table tbody, #holdings-table tr, #holdings-table td { display: block; width: 100%; }
+    #holdings-table tr { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+    #holdings-table td {
+      border-bottom: none; padding: 6px 0; display: flex; align-items: center;
+      justify-content: space-between; gap: 10px;
+    }
+    #holdings-table td[data-label]::before {
+      content: attr(data-label); color: var(--text-dim); font-size: 12px;
+      font-family: inherit; flex-shrink: 0;
+    }
+    #holdings-table td input, #holdings-table td select { width: 150px !important; text-align: right; }
+    #holdings-table td.name-cell { font-size: 15px; font-weight: 600; justify-content: flex-start; }
+    #holdings-table td.name-cell::before { content: none; }
+    #holdings-table td.val-cell { align-items: flex-start; }
+    #holdings-table td.val-cell .pos-summary { text-align: right; }
+    #holdings-table .drag-handle { display: none; }
+    #holdings-table .order-btns { flex-direction: row; }
+    #holdings-table .btn-danger { width: 100%; margin-top: 4px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="ticker-strip">stock-monitor / holdings</div>
+    <h1>保有銘柄モニター設定</h1>
+    <p>権利付き最終日・ニュース・適時開示の通知対象と、保有状況(取得単価・株数)を管理します。</p>
+    <a class="nav-link" href="./">← 株価アラート設定ツールへ</a>
+  </header>
+
+  <section class="card" id="connect-card">
+    <h2>接続設定</h2>
+    <div class="field row2">
+      <div>
+        <label for="repo-owner">GitHubユーザー名</label>
+        <input type="text" id="repo-owner" value="wootanland" placeholder="例: wootanland">
+      </div>
+      <div>
+        <label for="repo-name">リポジトリ名(この監視ツール用)</label>
+        <input type="text" id="repo-name" value="stock-monitor" placeholder="例: stock-monitor">
+      </div>
+    </div>
+    <div class="field">
+      <label for="pat">Personal Access Token</label>
+      <input type="password" id="pat" placeholder="github_pat_...">
+    </div>
+    <div class="actions-bar">
+      <button class="btn-primary" id="load-btn">読み込む</button>
+    </div>
+    <div class="help">
+      トークンはこの画面を開いている間だけメモリ上に保持され、保存や送信は行いません(GitHubへの通信のみ)。
+      トークンには、このリポジトリへの <strong>Contents: Read and write</strong> 権限が必要です。
+    </div>
+    <div class="status" id="connect-status"></div>
+  </section>
+
+  <section class="card" id="main-card" style="display:none;">
+    <h2>銘柄を追加</h2>
+    <div class="field" style="position:relative;">
+      <label for="search-input">会社名またはコードで検索(選ぶとそのまま追加されます)</label>
+      <input type="text" id="search-input" placeholder="例: トヨタ / 7203 / キオクシア" autocomplete="off">
+      <div id="search-results" class="search-results" style="display:none;"></div>
+    </div>
+    <div class="help" id="search-status">銘柄データを読み込み中…</div>
+
+    <div style="margin-top:16px;">
+      <label>検索に出ない銘柄(新規上場など)は手入力で追加</label>
+      <div class="manual-row">
+        <div><input type="text" id="manual-ticker" placeholder="コード 例: 464A"></div>
+        <div><input type="text" id="manual-name" placeholder="銘柄名"></div>
+        <div><button class="btn-ghost" id="manual-add-btn">追加</button></div>
+      </div>
+    </div>
+    <div class="status" id="add-status"></div>
+  </section>
+
+  <section class="card" id="list-card" style="display:none;">
+    <h2>保有状況の合計</h2>
+    <div class="totals" id="totals"></div>
+    <div class="help" id="totals-note"></div>
+
+    <h2 style="margin-top:24px;">保有銘柄</h2>
+    <div class="table-scroll">
+    <table id="holdings-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>コード</th>
+          <th>銘柄名</th>
+          <th>決算月</th>
+          <th>取得単価(円)</th>
+          <th>保有株数</th>
+          <th>取得金額・現在値・損益</th>
+          <th></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="holdings-body"></tbody>
+    </table>
+    </div>
+    <div class="empty-state" id="empty-state" style="display:none;">まだ銘柄が登録されていません</div>
+    <div class="help">
+      「決算月」を入れた銘柄だけ、権利付き最終日の通知対象になります(例: 3月決算なら3月末と9月末が権利確定日の目安)。
+      ニュース・適時開示は、決算月がなくても登録した全銘柄が対象です。
+      取得単価・保有株数は、この画面の損益表示だけに使い、Discordの通知には載せません。
+    </div>
+
+    <div class="actions-bar">
+      <button class="btn-primary" id="save-btn">GitHubに保存</button>
+    </div>
+    <div class="status" id="save-status"></div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script>
+let holdings = [];
+let currentSha = null;
+let priceState = {};   // monitor_state.json の prices(監視ツールが最後に取得した現在値)
+let companyList = [];
+let dragSrcIndex = null;
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  owner: $('repo-owner'), repo: $('repo-name'), pat: $('pat'),
+  loadBtn: $('load-btn'), connectStatus: $('connect-status'),
+  mainCard: $('main-card'), listCard: $('list-card'),
+  body: $('holdings-body'), emptyState: $('empty-state'),
+  totals: $('totals'), totalsNote: $('totals-note'),
+  searchInput: $('search-input'), searchResults: $('search-results'), searchStatus: $('search-status'),
+  manualTicker: $('manual-ticker'), manualName: $('manual-name'), manualAddBtn: $('manual-add-btn'),
+  addStatus: $('add-status'), saveBtn: $('save-btn'), saveStatus: $('save-status'),
+};
+
+// ------------------------------------------------------------ 共通
+function setStatus(el, kind, msg) { el.className = 'status show ' + kind; el.textContent = msg; }
+function clearStatus(el) { el.className = 'status'; el.textContent = ''; }
+function yen(n) { return '¥' + Math.round(n).toLocaleString('ja-JP'); }
+function isNum(v) { return v !== '' && v !== null && v !== undefined && !isNaN(Number(v)); }
+
+function normalizeTicker(raw) {
+  let t = raw.trim().toUpperCase();
+  if (!t) return t;
+  if (!t.endsWith('.T')) t += '.T';
+  return t;
+}
+function apiHeaders(pat) {
+  return {
+    'Authorization': 'Bearer ' + pat,
+    'Accept': 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+}
+function b64DecodeUtf8(b64) {
+  const binary = atob(b64.replace(/\n/g, ''));
+  const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+  return new TextDecoder('utf-8').decode(bytes);
+}
+function b64EncodeUtf8(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return btoa(binary);
+}
+
+// ------------------------------------------------------------ 銘柄検索
+const COMPANY_ALIASES = {
+  'NTT': '9432', 'KDDI': '9433', 'JT': '2914', 'ANA': '9202', 'JAL': '9201',
+  'MUFG': '8306', 'SMFG': '8316', 'ENEOS': '5020', 'JFE': '5411',
+  'IHI': '7013', 'TDK': '6762', 'SBI': '8473', 'GMO': '9449',
+};
+const KYUJITAI_MAP = {
+  '澁': '渋', '澤': '沢', '國': '国', '學': '学', '會': '会', '龍': '竜', '髙': '高',
+  '﨑': '崎', '櫻': '桜', '眞': '真', '德': '徳', '廣': '広', '藝': '芸', '關': '関', '禮': '礼',
+};
+function normalizeKanji(str) { return str.replace(/./g, ch => KYUJITAI_MAP[ch] || ch); }
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; }
+      } else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(field); field = '';
+        if (row.length > 1 || row[0] !== '') rows.push(row);
+        row = [];
+      } else field += c;
+    }
+  }
+  if (field.length || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+async function loadCompanyList() {
+  try {
+    const res = await fetch('https://raw.githubusercontent.com/code4fukui/EDINET/main/data/seccode.csv');
+    if (!res.ok) throw new Error('fetch failed');
+    const rows = parseCSV(await res.text());
+    if (!rows.length) throw new Error('empty');
+    const header = rows[0].map(h => h.trim());
+    let codeIdx = header.indexOf('証券コード');
+    if (codeIdx === -1) codeIdx = header.findIndex(h => h.includes('証券コード'));
+    let nameIdx = header.indexOf('提出者名');
+    if (nameIdx === -1) nameIdx = header.findIndex(h => h.includes('銘柄名') || h.includes('会社名'));
+    const statusIdx = header.indexOf('上場区分');
+    if (codeIdx === -1 || nameIdx === -1) throw new Error('columns not found');
+
+    companyList = rows.slice(1)
+      .filter(r => r[codeIdx] && r[nameIdx])
+      .filter(r => statusIdx === -1 || r[statusIdx].trim() === '上場')
+      .map(r => {
+        let code = r[codeIdx].trim();
+        if (code.length === 5) code = code.slice(0, 4);
+        const name = r[nameIdx].trim();
+        return { code, name, nameNorm: normalizeKanji(name) };
+      })
+      .filter((c, idx, arr) => arr.findIndex(x => x.code === c.code) === idx);
+    els.searchStatus.textContent = `${companyList.length}銘柄から検索できます。NTT・KDDI・JTなど一部の略称も使えます。`;
+  } catch (e) {
+    console.error('銘柄データ読み込みエラー:', e);
+    els.searchStatus.textContent = `銘柄検索データの読み込みに失敗しました(${e.message || e})。下の手入力で追加してください。`;
+  }
+}
+
+function runSearch(query) {
+  const q = query.trim();
+  if (!q) { els.searchResults.style.display = 'none'; return; }
+  const qUpper = q.toUpperCase();
+  const qNorm = normalizeKanji(q);
+  let matches = companyList.filter(c => c.code.startsWith(qUpper) || c.name.includes(q) || c.nameNorm.includes(qNorm));
+  const aliasCode = COMPANY_ALIASES[qUpper];
+  if (aliasCode) {
+    const a = companyList.find(c => c.code === aliasCode);
+    if (a) matches = [a, ...matches.filter(m => m.code !== a.code)];
+  }
+  matches = matches.slice(0, 8);
+  if (!matches.length) { els.searchResults.style.display = 'none'; return; }
+  els.searchResults.innerHTML = '';
+  matches.forEach(m => {
+    const row = document.createElement('div');
+    const n = document.createElement('span'); n.textContent = m.name;
+    const c = document.createElement('span'); c.className = 's-code'; c.textContent = m.code;
+    row.appendChild(n); row.appendChild(c);
+    row.addEventListener('click', () => {
+      addHolding(m.code, m.name);
+      els.searchInput.value = '';
+      els.searchResults.style.display = 'none';
+    });
+    els.searchResults.appendChild(row);
+  });
+  els.searchResults.style.display = 'block';
+}
+
+// ------------------------------------------------------------ 読み込み
+async function loadConfig() {
+  const owner = els.owner.value.trim();
+  const repo = els.repo.value.trim();
+  const pat = els.pat.value.trim();
+  if (!owner || !repo || !pat) {
+    setStatus(els.connectStatus, 'err', 'ユーザー名・リポジトリ名・トークンを全て入力してください。');
+    return;
+  }
+  setStatus(els.connectStatus, 'pending', '読み込み中…');
+  els.loadBtn.disabled = true;
+  try {
+    const base = `https://api.github.com/repos/${owner}/${repo}/contents`;
+    const res = await fetch(`${base}/config.yaml`, { headers: apiHeaders(pat) });
+    if (!res.ok) {
+      throw new Error(`GitHubからの読み込みに失敗しました (${res.status})。リポジトリ名と、トークンがこのリポジトリを対象にしているかを確認してください。`);
+    }
+    const data = await res.json();
+    currentSha = data.sha;
+    const parsed = jsyaml.load(b64DecodeUtf8(data.content)) || {};
+    holdings = Array.isArray(parsed.holdings) ? parsed.holdings.map(h => ({
+      ticker: h.ticker || '',
+      name: h.name || '',
+      fiscal_month: h.fiscal_month ?? '',
+      cost_price: h.cost_price ?? '',
+      holding_shares: h.holding_shares ?? '',
+    })) : [];
+
+    // 現在値(任意。まだ監視が一度も動いていなければ無い)
+    priceState = {};
+    try {
+      const sres = await fetch(`${base}/monitor_state.json`, { headers: apiHeaders(pat) });
+      if (sres.ok) {
+        const sdata = await sres.json();
+        const st = JSON.parse(b64DecodeUtf8(sdata.content));
+        priceState = (st && st.prices) || {};
+      }
+    } catch (e) { priceState = {}; }
+
+    renderHoldings();
+    els.mainCard.style.display = 'block';
+    els.listCard.style.display = 'block';
+    setStatus(els.connectStatus, 'ok', `読み込み完了(${holdings.length}銘柄)。`);
+  } catch (e) {
+    setStatus(els.connectStatus, 'err', e.message || '読み込みに失敗しました。');
+  } finally {
+    els.loadBtn.disabled = false;
+  }
+}
+
+// ------------------------------------------------------------ 表示
+function positionOf(h) {
+  const cost = isNum(h.cost_price) ? Number(h.cost_price) : NaN;
+  const shares = isNum(h.holding_shares) ? Number(h.holding_shares) : NaN;
+  const p = priceState[h.ticker];
+  const price = p && typeof p.last_price === 'number' ? p.last_price : NaN;
+  return { cost, shares, price, checkedAt: p ? p.checked_at : '' };
+}
+
+function summaryHtml(h) {
+  const { cost, shares, price, checkedAt } = positionOf(h);
+  const lines = [];
+  if (!isNaN(cost) && !isNaN(shares)) lines.push(`取得金額 ${yen(cost * shares)}`);
+  if (!isNaN(price)) {
+    lines.push(`現在値 ${yen(price)}${checkedAt ? `(${checkedAt}時点)` : ''}`);
+    if (!isNaN(cost) && !isNaN(shares) && cost * shares > 0) {
+      const pnl = (price - cost) * shares;
+      const pct = (pnl / (cost * shares)) * 100;
+      const sign = pnl >= 0 ? '+' : '-';
+      const cls = pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+      lines.push(`評価損益 <span class="${cls}">${sign}${yen(Math.abs(pnl))} (${sign}${Math.abs(pct).toFixed(1)}%)</span>`);
+    }
+  }
+  return lines.length ? lines.join('<br>') : '取得単価と保有株数を入れると表示されます';
+}
+
+function renderTotals() {
+  let cost = 0, value = 0, n = 0;
+  holdings.forEach(h => {
+    const p = positionOf(h);
+    if (!isNaN(p.cost) && !isNaN(p.shares) && !isNaN(p.price) && p.cost * p.shares > 0) {
+      cost += p.cost * p.shares;
+      value += p.price * p.shares;
+      n++;
+    }
+  });
+  if (!n) {
+    els.totals.innerHTML = '<div style="grid-column:1/-1;color:var(--text-dim);font-size:13px;">取得単価・保有株数・現在値がそろった銘柄があると、ここに合計が出ます。</div>';
+    els.totalsNote.textContent = '現在値は、監視ツールが動いたあとに表示されます(約15〜20分遅れの価格です)。';
+    return;
+  }
+  const pnl = value - cost;
+  const pct = (pnl / cost) * 100;
+  const sign = pnl >= 0 ? '+' : '-';
+  const cls = pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+  els.totals.innerHTML = `
+    <div><div class="t-label">取得金額 合計</div><div class="t-value">${yen(cost)}</div></div>
+    <div><div class="t-label">評価額 合計</div><div class="t-value">${yen(value)}</div></div>
+    <div><div class="t-label">評価損益</div><div class="t-value ${cls}">${sign}${yen(Math.abs(pnl))} (${sign}${Math.abs(pct).toFixed(1)}%)</div></div>`;
+  els.totalsNote.textContent = `取得単価・保有株数・現在値がそろった${n}銘柄の合計です。`;
+}
+
+function renderHoldings() {
+  els.body.innerHTML = '';
+  els.emptyState.style.display = holdings.length ? 'none' : 'block';
+
+  holdings.forEach((h, idx) => {
+    const tr = document.createElement('tr');
+    tr.draggable = true;
+    tr.addEventListener('dragstart', () => { dragSrcIndex = idx; tr.classList.add('dragging'); });
+    tr.addEventListener('dragend', () => {
+      tr.classList.remove('dragging');
+      document.querySelectorAll('#holdings-body tr').forEach(r => r.classList.remove('drag-over'));
+    });
+    tr.addEventListener('dragover', (e) => { e.preventDefault(); tr.classList.add('drag-over'); });
+    tr.addEventListener('dragleave', () => tr.classList.remove('drag-over'));
+    tr.addEventListener('drop', (e) => {
+      e.preventDefault();
+      tr.classList.remove('drag-over');
+      if (dragSrcIndex === null || dragSrcIndex === idx) return;
+      const moved = holdings.splice(dragSrcIndex, 1)[0];
+      holdings.splice(idx, 0, moved);
+      dragSrcIndex = null;
+      renderHoldings();
+    });
+
+    const tdHandle = document.createElement('td');
+    const handle = document.createElement('span');
+    handle.className = 'drag-handle';
+    handle.textContent = '⠿';
+    handle.title = 'つかんでドラッグすると順番を変えられます';
+    tdHandle.appendChild(handle);
+    tr.appendChild(tdHandle);
+
+    const tdTicker = document.createElement('td');
+    tdTicker.setAttribute('data-label', 'コード');
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = h.ticker;
+    const link = document.createElement('a');
+    link.className = 'price-link';
+    link.href = `https://finance.yahoo.co.jp/quote/${encodeURIComponent(h.ticker)}`;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = '現在値を見る ↗';
+    const tickerWrap = document.createElement('div');
+    tickerWrap.appendChild(badge);
+    tickerWrap.appendChild(document.createElement('br'));
+    tickerWrap.appendChild(link);
+    tdTicker.appendChild(tickerWrap);
+    tr.appendChild(tdTicker);
+
+    const tdName = document.createElement('td');
+    tdName.className = 'name-cell';
+    tdName.textContent = h.name;
+    tr.appendChild(tdName);
+
+    // 値が変わるたびに、取得金額・損益の表示と合計を更新する
+    const valCell = document.createElement('td');
+    valCell.className = 'val-cell';
+    valCell.setAttribute('data-label', '取得金額・損益');
+    const summary = document.createElement('div');
+    summary.className = 'pos-summary';
+    valCell.appendChild(summary);
+    const refresh = () => { summary.innerHTML = summaryHtml(holdings[idx]); renderTotals(); };
+
+    const tdFm = document.createElement('td');
+    tdFm.className = 'fm-cell';
+    tdFm.setAttribute('data-label', '決算月');
+    const fmSelect = document.createElement('select');
+    const none = document.createElement('option');
+    none.value = ''; none.textContent = '未設定';
+    fmSelect.appendChild(none);
+    for (let m = 1; m <= 12; m++) {
+      const o = document.createElement('option');
+      o.value = String(m); o.textContent = `${m}月`;
+      fmSelect.appendChild(o);
+    }
+    fmSelect.value = isNum(h.fiscal_month) ? String(h.fiscal_month) : '';
+    fmSelect.addEventListener('change', () => {
+      holdings[idx].fiscal_month = fmSelect.value === '' ? '' : Number(fmSelect.value);
+    });
+    tdFm.appendChild(fmSelect);
+    tr.appendChild(tdFm);
+
+    const tdCost = document.createElement('td');
+    tdCost.className = 'cost-cell';
+    tdCost.setAttribute('data-label', '取得単価(円)');
+    const costInput = document.createElement('input');
+    costInput.type = 'number';
+    costInput.step = 'any';
+    costInput.placeholder = '1株あたり';
+    costInput.value = h.cost_price;
+    costInput.addEventListener('input', () => {
+      holdings[idx].cost_price = costInput.value === '' ? '' : Number(costInput.value);
+      refresh();
+    });
+    tdCost.appendChild(costInput);
+    tr.appendChild(tdCost);
+
+    const tdShares = document.createElement('td');
+    tdShares.className = 'shares-cell';
+    tdShares.setAttribute('data-label', '保有株数');
+    const sharesInput = document.createElement('input');
+    sharesInput.type = 'number';
+    sharesInput.placeholder = '株数';
+    sharesInput.value = h.holding_shares;
+    sharesInput.addEventListener('input', () => {
+      holdings[idx].holding_shares = sharesInput.value === '' ? '' : Number(sharesInput.value);
+      refresh();
+    });
+    tdShares.appendChild(sharesInput);
+    tr.appendChild(tdShares);
+
+    summary.innerHTML = summaryHtml(h);
+    tr.appendChild(valCell);
+
+    const tdOrder = document.createElement('td');
+    const orderBtns = document.createElement('div');
+    orderBtns.className = 'order-btns';
+    const up = document.createElement('button');
+    up.textContent = '▲';
+    up.disabled = idx === 0;
+    up.addEventListener('click', () => {
+      [holdings[idx - 1], holdings[idx]] = [holdings[idx], holdings[idx - 1]];
+      renderHoldings();
+    });
+    const down = document.createElement('button');
+    down.textContent = '▼';
+    down.disabled = idx === holdings.length - 1;
+    down.addEventListener('click', () => {
+      [holdings[idx + 1], holdings[idx]] = [holdings[idx], holdings[idx + 1]];
+      renderHoldings();
+    });
+    orderBtns.appendChild(up);
+    orderBtns.appendChild(down);
+    tdOrder.appendChild(orderBtns);
+    tr.appendChild(tdOrder);
+
+    const tdDel = document.createElement('td');
+    const del = document.createElement('button');
+    del.className = 'btn-danger';
+    del.textContent = '削除';
+    del.addEventListener('click', () => {
+      holdings.splice(idx, 1);
+      renderHoldings();
+    });
+    tdDel.appendChild(del);
+    tr.appendChild(tdDel);
+
+    els.body.appendChild(tr);
+  });
+  renderTotals();
+}
+
+// ------------------------------------------------------------ 追加・保存
+function addHolding(codeRaw, nameRaw) {
+  const code = (codeRaw || '').trim();
+  const name = (nameRaw || '').trim();
+  if (!code || !name) {
+    setStatus(els.addStatus, 'err', 'コードと銘柄名の両方を入力してください。');
+    return false;
+  }
+  const ticker = normalizeTicker(code);
+  if (holdings.some(h => h.ticker === ticker)) {
+    setStatus(els.addStatus, 'err', `${ticker} はすでに登録されています。`);
+    return false;
+  }
+  holdings.push({ ticker, name, fiscal_month: '', cost_price: '', holding_shares: '' });
+  renderHoldings();
+  setStatus(els.addStatus, 'ok', `${name}(${ticker})を追加しました。決算月などを入力して「GitHubに保存」を押してください。`);
+  return true;
+}
+
+function buildYaml() {
+  const header =
+`# 保有銘柄の管理用設定(権利付き最終日・ニュース・適時開示の通知に使います)
+# 銘柄の追加・削除や、決算月・取得単価・保有株数の入力は、設定画面から行えます。
+#
+# ticker          : ティッカーコード(東証は末尾に ".T")
+# name            : 銘柄名(ニュース検索にも使います)
+# fiscal_month    : 決算期末月(1〜12)。指定すると権利付き最終日を自動計算して通知
+# cost_price      : 取得単価(1株あたり・円)。設定画面の損益表示用で、通知には使いません
+# holding_shares  : 保有株数。設定画面の損益表示用で、通知には使いません
+
+holdings:
+`;
+  const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  const body = holdings.map(h => {
+    let block = `  - ticker: "${esc(h.ticker)}"\n    name: "${esc(h.name)}"\n`;
+    if (isNum(h.fiscal_month)) block += `    fiscal_month: ${Number(h.fiscal_month)}\n`;
+    if (isNum(h.cost_price)) block += `    cost_price: ${Number(h.cost_price)}\n`;
+    if (isNum(h.holding_shares)) block += `    holding_shares: ${Number(h.holding_shares)}\n`;
+    return block;
+  }).join('\n');
+  return header + (body || '  []\n');
+}
+
+async function saveConfig() {
+  const owner = els.owner.value.trim();
+  const repo = els.repo.value.trim();
+  const pat = els.pat.value.trim();
+  if (!currentSha) {
+    setStatus(els.saveStatus, 'err', '先に「読み込む」を実行してください。');
+    return;
+  }
+  setStatus(els.saveStatus, 'pending', '保存中…');
+  els.saveBtn.disabled = true;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/config.yaml`, {
+      method: 'PUT',
+      headers: apiHeaders(pat),
+      body: JSON.stringify({
+        message: 'Update config.yaml via monitor tool',
+        content: b64EncodeUtf8(buildYaml()),
+        sha: currentSha,
+      }),
+    });
+    if (!res.ok) throw new Error(`保存に失敗しました (${res.status})。トークンの権限(Contents: Read and write)を確認してください。`);
+    const data = await res.json();
+    currentSha = data.content.sha;
+    setStatus(els.saveStatus, 'ok', '保存しました。次回の監視の実行から反映されます。');
+  } catch (e) {
+    setStatus(els.saveStatus, 'err', e.message || '保存に失敗しました。');
+  } finally {
+    els.saveBtn.disabled = false;
+  }
+}
+
+els.loadBtn.addEventListener('click', loadConfig);
+els.saveBtn.addEventListener('click', saveConfig);
+els.manualAddBtn.addEventListener('click', () => {
+  if (addHolding(els.manualTicker.value, els.manualName.value)) {
+    els.manualTicker.value = '';
+    els.manualName.value = '';
+  }
+});
+els.searchInput.addEventListener('input', () => runSearch(els.searchInput.value));
+document.addEventListener('click', (e) => {
+  if (!els.searchResults.contains(e.target) && e.target !== els.searchInput) {
+    els.searchResults.style.display = 'none';
+  }
+});
+
+loadCompanyList();
+</script>
+</body>
+</html>
