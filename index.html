@@ -200,6 +200,25 @@
   .order-btns button:hover { color: var(--text); }
   .date-cell { color: var(--text-dim); font-size: 12px; white-space: nowrap; }
 
+  /* --- 保有・権利セル(決算月・取得単価・保有株数・損益) --- */
+  select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 9px 8px;
+    font-size: 14px;
+    font-family: var(--mono);
+  }
+  select:focus { outline: none; border-color: var(--accent-dim); }
+  .pos-cell { min-width: 330px; }
+  .pos-grid { display: grid; grid-template-columns: 0.8fr 1fr 1fr; gap: 6px; }
+  .pos-grid label { font-size: 11px; margin-bottom: 3px; }
+  .pos-summary { font-size: 12px; margin-top: 8px; line-height: 1.6; color: var(--text-dim); font-family: var(--mono); }
+  .pos-summary .pnl-pos { color: var(--accent); }
+  .pos-summary .pnl-neg { color: var(--danger); }
+
   /* --- スマホなど狭い画面ではテーブルをカード表示に切り替える --- */
   @media (max-width: 720px) {
     body { padding: 16px 10px 80px; }
@@ -248,6 +267,10 @@
     #holdings-table .drag-handle { display: none; } /* タッチだと誤操作しやすいので非表示、▲▼のみ使う */
     #holdings-table .order-btns { flex-direction: row; }
     #holdings-table .btn-danger { width: 100%; margin-top: 4px; }
+    #holdings-table td.pos-cell { flex-direction: column; align-items: stretch; min-width: 0; }
+    #holdings-table td.pos-cell input,
+    #holdings-table td.pos-cell select { width: 100% !important; text-align: left; }
+    .pos-summary { white-space: normal; }
   }
 </style>
 </head>
@@ -309,6 +332,7 @@
           <th>売り(以上)</th>
           <th>売り株数</th>
           <th>損切り(以下)</th>
+          <th>保有・権利</th>
           <th>設定日</th>
           <th></th>
           <th></th>
@@ -394,6 +418,7 @@ const els = {
 
 let companyList = [];
 let dragSrcIndex = null;
+let priceState = {};  // state.json(株価アラートが最後に取得した現在値)
 
 function todayStr() {
   const d = new Date();
@@ -560,6 +585,22 @@ function b64EncodeUtf8(str) {
   return btoa(binary);
 }
 
+// 株価アラートが書き込んでいる state.json から、最後に取得した現在値を読む(取得できなければ無視)
+async function loadPriceState(owner, repo, pat) {
+  priceState = {};
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/state.json`, { headers: apiHeaders(pat) });
+    if (!res.ok) return;
+    const data = await res.json();
+    const parsed = JSON.parse(b64DecodeUtf8(data.content));
+    if (parsed && typeof parsed === 'object') priceState = parsed;
+  } catch (e) { priceState = {}; }
+}
+
+function yen(n) {
+  return '¥' + Math.round(n).toLocaleString('ja-JP');
+}
+
 async function loadConfig() {
   const owner = els.owner.value.trim();
   const repo = els.repo.value.trim();
@@ -589,8 +630,12 @@ async function loadConfig() {
       buy_shares: h.buy_shares ?? '',
       sell_shares: h.sell_shares ?? '',
       stop_loss_below: h.stop_loss_below ?? '',
+      fiscal_month: h.fiscal_month ?? '',
+      cost_price: h.cost_price ?? '',
+      holding_shares: h.holding_shares ?? '',
       updated_at: h.updated_at || '',
     })) : [];
+    await loadPriceState(owner, repo, pat);
     renderHoldings();
     els.holdingsCard.style.display = 'block';
     setStatus(els.connectStatus, 'ok', `読み込み完了(${holdings.length}銘柄)。下で編集できます。`);
@@ -708,6 +753,88 @@ function renderHoldings() {
     tdStoploss.appendChild(stoplossInput);
     tr.appendChild(tdStoploss);
 
+    // --- 保有・権利(決算月 / 取得単価 / 保有株数 + 取得金額・現在値・評価損益の表示) ---
+    const tdPos = document.createElement('td');
+    tdPos.setAttribute('data-label', '保有・権利');
+    tdPos.classList.add('pos-cell');
+
+    const summary = document.createElement('div');
+    summary.className = 'pos-summary';
+    const updateSummary = () => {
+      const cur = holdings[idx];
+      const cost = cur.cost_price === '' ? NaN : Number(cur.cost_price);
+      const shares = cur.holding_shares === '' ? NaN : Number(cur.holding_shares);
+      const lines = [];
+      if (!isNaN(cost) && !isNaN(shares)) lines.push(`取得金額 ${yen(cost * shares)}`);
+      const p = priceState[cur.ticker];
+      const price = p && typeof p.last_price === 'number' ? p.last_price : NaN;
+      if (!isNaN(price)) {
+        lines.push(`現在値 ${yen(price)}${p.checked_at ? `(${p.checked_at}時点)` : ''}`);
+        if (!isNaN(cost) && !isNaN(shares) && cost * shares > 0) {
+          const pnl = (price - cost) * shares;
+          const pct = (pnl / (cost * shares)) * 100;
+          const sign = pnl >= 0 ? '+' : '-';
+          const cls = pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+          lines.push(`評価損益 <span class="${cls}">${sign}${yen(Math.abs(pnl))} (${sign}${Math.abs(pct).toFixed(1)}%)</span>`);
+        }
+      }
+      summary.innerHTML = lines.length ? lines.join('<br>') : '取得単価と保有株数を入れると取得金額・評価損益が出ます';
+    };
+
+    const makeField = (labelText, el) => {
+      const wrap = document.createElement('div');
+      const lab = document.createElement('label');
+      lab.textContent = labelText;
+      wrap.appendChild(lab);
+      wrap.appendChild(el);
+      return wrap;
+    };
+
+    const fmSelect = document.createElement('select');
+    const optNone = document.createElement('option');
+    optNone.value = '';
+    optNone.textContent = '未設定';
+    fmSelect.appendChild(optNone);
+    for (let m = 1; m <= 12; m++) {
+      const o = document.createElement('option');
+      o.value = String(m);
+      o.textContent = `${m}月`;
+      fmSelect.appendChild(o);
+    }
+    fmSelect.value = h.fiscal_month === '' ? '' : String(h.fiscal_month);
+    fmSelect.addEventListener('change', () => {
+      holdings[idx].fiscal_month = fmSelect.value === '' ? '' : Number(fmSelect.value);
+    });
+
+    const costInput = document.createElement('input');
+    costInput.type = 'number';
+    costInput.step = 'any';
+    costInput.placeholder = '1株あたり';
+    costInput.value = h.cost_price;
+    costInput.addEventListener('input', () => {
+      holdings[idx].cost_price = costInput.value === '' ? '' : Number(costInput.value);
+      updateSummary();
+    });
+
+    const sharesInput = document.createElement('input');
+    sharesInput.type = 'number';
+    sharesInput.placeholder = '株数';
+    sharesInput.value = h.holding_shares;
+    sharesInput.addEventListener('input', () => {
+      holdings[idx].holding_shares = sharesInput.value === '' ? '' : Number(sharesInput.value);
+      updateSummary();
+    });
+
+    const grid = document.createElement('div');
+    grid.className = 'pos-grid';
+    grid.appendChild(makeField('決算月', fmSelect));
+    grid.appendChild(makeField('取得単価(円)', costInput));
+    grid.appendChild(makeField('保有株数', sharesInput));
+    tdPos.appendChild(grid);
+    tdPos.appendChild(summary);
+    updateSummary();
+    tr.appendChild(tdPos);
+
     const tdDate = document.createElement('td');
     tdDate.setAttribute('data-label', '設定日');
     tdDate.classList.add('date-cell');
@@ -779,6 +906,9 @@ function addHolding() {
   entry.buy_shares = buyShares ? Number(buyShares) : '';
   entry.sell_shares = sellShares ? Number(sellShares) : '';
   entry.stop_loss_below = stoploss ? Number(stoploss) : '';
+  entry.fiscal_month = '';
+  entry.cost_price = '';
+  entry.holding_shares = '';
   entry.updated_at = todayStr();
 
   holdings.push(entry);
@@ -805,6 +935,9 @@ function buildYaml() {
 # stop_loss_below : この価格「以下」になったら撤退(損切り)シグナルとして通知(buy_belowとは別枠)
 # buy_shares      : 指定すると、買いシグナル通知に「◯株買い」と添える(任意)
 # sell_shares     : 指定すると、売り・損切りシグナル通知に「◯株売り」と添える(任意)
+# fiscal_month    : 決算期末月(1〜12)。指定すると権利付き最終日を自動計算して通知(任意)
+# cost_price      : 取得単価(1株あたり・円)。Web設定ツールの損益表示用で、通知には使いません(任意)
+# holding_shares  : 保有株数。Web設定ツールの損益表示用で、通知には使いません(任意)
 # updated_at      : この銘柄を設定・変更した日付(Web設定ツールが自動で記録します)
 # いずれも任意です(不要な項目は削除してください)。
 
@@ -837,6 +970,15 @@ holdings:
     }
     if (h.stop_loss_below !== '' && h.stop_loss_below !== null && h.stop_loss_below !== undefined) {
       block += `    stop_loss_below: ${h.stop_loss_below}\n`;
+    }
+    if (h.fiscal_month !== '' && h.fiscal_month !== null && h.fiscal_month !== undefined) {
+      block += `    fiscal_month: ${h.fiscal_month}\n`;
+    }
+    if (h.cost_price !== '' && h.cost_price !== null && h.cost_price !== undefined) {
+      block += `    cost_price: ${h.cost_price}\n`;
+    }
+    if (h.holding_shares !== '' && h.holding_shares !== null && h.holding_shares !== undefined) {
+      block += `    holding_shares: ${h.holding_shares}\n`;
     }
     if (h.updated_at) {
       block += `    updated_at: "${h.updated_at}"\n`;
